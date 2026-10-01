@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Loading…</title>
+  <meta name="description" content="" />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    // Point these at your CMS. The API key comes from Admin → API & frontend.
+    window.CMS_URL = 'http://localhost:4000/api';
+    window.CMS_KEY = new URLSearchParams(location.search).get('key') || localStorage.getItem('cms_key') || 'PASTE_YOUR_SITE_API_KEY';
+    if (new URLSearchParams(location.search).get('key')) localStorage.setItem('cms_key', window.CMS_KEY);
+  </script>
+</head>
+<body>
+  <header class="site-header"><a class="logo-link" href="index.html"></a><nav></nav></header>
+  <main id="app"><p class="loading">Loading…</p></main>
+  <footer class="site-footer"></footer>
+
+  <script type="module">
+    import { cms, esc, img } from './cms.js';
+    import { renderSections, hydrate } from './sections.js';
+
+    const params = new URLSearchParams(location.search);
+    const slug = params.get('page') || 'home';
+
+    try {
+      // 1. Global site data (logo, menus, footer) and 2. the page with its sections
+      const [site, page] = await Promise.all([cms('/site'), cms(`/pages/${slug}`)]);
+      const s = site.settings;
+
+      document.documentElement.style.setProperty('--brand', s.primary_color || '#ff4d2e');
+      document.title = page.seo.meta_title || `${page.title} – ${s.site_title}`;
+      document.querySelector('meta[name=description]').content = page.seo.meta_description || s.default_seo?.meta_description || '';
+
+      document.querySelector('.logo-link').innerHTML = s.logo ? img(s.logo, { size: 'thumb' }) : esc(s.site_title);
+      document.querySelector('nav').innerHTML = (site.menus.main || [])
+        .map((m) => `<a href="${m.url === '/' ? 'index.html' : m.url.startsWith('/#') ? m.url.slice(1) : `?page=${m.url.replace(/^\//, '')}`}">${esc(m.label)}</a>`).join('');
+
+      document.querySelector('#app').innerHTML = renderSections(page.sections);
+      document.querySelector('.site-footer').innerHTML = `
+        <p>${esc(s.footer_text || '')}</p>
+        <p>${(s.social || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.platform)}</a>`).join(' · ')}</p>
+        <p class="muted">${esc(s.copyright || '')} · ${esc(s.email || '')}</p>`;
+      hydrate();
+    } catch (err) {
+      document.querySelector('#app').innerHTML = `<div class="wrap"><h2>Could not load content</h2><p>${esc(err.message)}</p>
+        <p>Open this page as <code>index.html?key=YOUR_API_KEY</code> and make sure the CMS is running.</p></div>`;
+    }
+  </script>
+</body>
+</html>

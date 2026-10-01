@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Case study</title>
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    window.CMS_URL = 'http://localhost:4000/api';
+    window.CMS_KEY = localStorage.getItem('cms_key') || 'PASTE_YOUR_SITE_API_KEY';
+  </script>
+</head>
+<body>
+  <header class="site-header"><a class="logo-link" href="index.html">← Back</a><nav></nav></header>
+  <main id="app"><p class="loading">Loading…</p></main>
+
+  <script type="module">
+    import { cms, esc, img, link } from './cms.js';
+    const slug = new URLSearchParams(location.search).get('slug');
+    try {
+      // Single item of the "case-studies" content type
+      const cs = await cms(`/content/case-studies/${encodeURIComponent(slug)}`);
+      const d = cs.data;
+      document.title = cs.seo?.meta_title || cs.title;
+      document.querySelector('#app').innerHTML = `
+        <section class="hero">${img(d.cover, { cls: 'hero-bg' })}
+          <div class="hero-inner"><p class="eyebrow">${esc(d.client)} · ${esc(d.year)}</p><h1>${esc(cs.title)}</h1>
+          <p class="lead">${esc(d.excerpt)}</p>
+          <p>${(d.services || []).map((s) => `<span class="tag">${esc(s.replace(/_/g, ' '))}</span>`).join('')}</p></div>
+        </section>
+        <section class="wrap rich">${d.body || ''}</section>
+        ${d.results?.length ? `<section class="wrap stats"><div class="stats-grid">${d.results.map((r) => `<div class="stat"><b>${esc(r.number)}</b><p>${esc(r.label)}</p></div>`).join('')}</div></section>` : ''}
+        ${d.gallery?.length ? `<section class="wrap"><div class="gallery grid">${d.gallery.map((m) => img(m, { size: 'medium' })).join('')}</div></section>` : ''}
+        <section class="wrap">${link(d.website)}</section>
+        ${d.related?.length ? `<section class="wrap"><h2>Related work</h2><div class="work-grid">${d.related.map((r) => `
+          <a class="work" href="?slug=${encodeURIComponent(r.slug)}"><div class="work-img">${img(r.data.cover, { size: 'medium' })}</div><div class="work-meta"><h3>${esc(r.title)}</h3></div></a>`).join('')}</div></section>` : ''}
+        <section class="wrap row-between">
+          ${cs.prev ? `<a class="more" href="?slug=${cs.prev.slug}">← ${esc(cs.prev.title)}</a>` : '<span></span>'}
+          ${cs.next ? `<a class="more" href="?slug=${cs.next.slug}">${esc(cs.next.title)} →</a>` : ''}
+        </section>`;
+    } catch (err) {
+      document.querySelector('#app').innerHTML = `<div class="wrap"><h2>Not found</h2><p>${esc(err.message)}</p></div>`;
+    }
+  </script>
+</body>
+</html>
