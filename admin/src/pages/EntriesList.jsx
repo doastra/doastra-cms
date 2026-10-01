@@ -22,16 +22,17 @@ export default function EntriesList() {
   const confirm = useConfirm();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
   const [dragIdx, setDragIdx] = useState(null);
   const { data, reload, setData } = useLoad(
-    () => api.get(`/entries?type=${type}&page=${page}&limit=50&search=${encodeURIComponent(search)}&status=${status}`),
-    [type, page, search, status, siteId]
+    () => api.get(`/entries?type=${type}&page=${page}&limit=50&search=${encodeURIComponent(search)}&status=${status}&term=${term}`),
+    [type, page, search, status, term, siteId]
   );
   const ct = contentTypes.find((c) => c.slug === type);
   if (!ct) return contentTypes.length ? <Empty icon="🤔" title="Content type not found" /> : <Spinner />;
   const hasImage = ct.fields.some((f) => f.type === 'image');
-  const manual = ct.sort_by === 'sort_order' && !search && !status;
+  const manual = ct.sort_by === 'sort_order' && !search && !status && !term;
 
   const remove = async (e) => {
     if (!(await confirm(`Delete “${e.title}”? This cannot be undone.`, { okText: 'Delete' }))) return;
@@ -58,17 +59,23 @@ export default function EntriesList() {
           <select className="input" style={{ maxWidth: 160 }} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All statuses</option><option value="published">Published</option><option value="draft">Drafts</option>
           </select>
+          {data?.categories && (
+            <select className="input" style={{ maxWidth: 200 }} value={term} onChange={(e) => { setTerm(e.target.value); setPage(1); }}>
+              <option value="">All {data.categories.label.toLowerCase()}</option>
+              {data.categories.terms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
           {manual && <span className="muted small">Drag rows to change the order on the website.</span>}
         </div>
         <div className="card">
           {!data ? <Spinner /> : data.items.length === 0 ? (
-            <Empty icon={ct.icon || '📁'} title={search || status ? 'Nothing matches' : `No ${ct.name.toLowerCase()} yet`}>
-              {!search && !status && <Link className="btn primary" to={`/s/${siteId}/content/${type}/new`}>Add the first one</Link>}
+            <Empty icon={ct.icon || '📁'} title={search || status || term ? 'Nothing matches' : `No ${ct.name.toLowerCase()} yet`}>
+              {!search && !status && !term && <Link className="btn primary" to={`/s/${siteId}/content/${type}/new`}>Add the first one</Link>}
             </Empty>
           ) : (
             <>
               <table className="table">
-                <thead><tr>{manual && <th style={{ width: 30 }} />}{hasImage && <th style={{ width: 60 }} />}<th>Title</th><th>Status</th><th className="hide-mobile">Author</th><th className="hide-mobile">Updated</th><th /></tr></thead>
+                <thead><tr>{manual && <th style={{ width: 30 }} />}{hasImage && <th style={{ width: 60 }} />}<th>Title</th>{data?.categories && <th>{data.categories.label}</th>}<th>Status</th><th className="hide-mobile">Author</th><th className="hide-mobile">Updated</th><th /></tr></thead>
                 <tbody>
                   {data.items.map((e, i) => (
                     <tr key={e.id} className="clickable" onClick={() => nav(`/s/${siteId}/content/${type}/${e.id}`)}
@@ -76,6 +83,7 @@ export default function EntriesList() {
                       {manual && <td className="drag">⋮⋮</td>}
                       {hasImage && <td><Thumb ct={ct} data={e.data} /></td>}
                       <td><b>{e.title}</b><div className="muted small"><code>{e.slug}</code></div></td>
+                      {data?.categories && <td>{e.categories?.length ? e.categories.join(', ') : <span className="muted">—</span>}</td>}
                       <td><StatusBadge status={e.status} /></td>
                       <td className="muted hide-mobile">{e.author_name}</td>
                       <td className="muted small hide-mobile">{timeAgo(e.updated_at)}</td>

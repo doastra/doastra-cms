@@ -46,6 +46,13 @@ r.get('/entries', ah(async (req, res) => {
   let where = 'e.content_type_id = $1';
   if (req.query.status) { params.push(req.query.status); where += ` AND e.status = $${params.length}`; }
   if (req.query.search) { params.push(`%${req.query.search}%`); where += ` AND (e.title ILIKE $${params.length} OR e.slug ILIKE $${params.length})`; }
+  // Category column/filter: use the content type's taxonomy field (prefer one named like "categor*")
+  const taxFields = (ct.fields || []).filter((f) => f.type === 'taxonomy');
+  const catField = taxFields.find((f) => /categor/i.test(f.taxonomy + f.key)) || taxFields[0] || null;
+  if (catField && req.query.term) {
+    const termId = intOr(req.query.term, 0);
+    if (termId) { params.push(JSON.stringify([termId])); where += ` AND COALESCE(e.data->'${catField.key.replace(/'/g, "''")}', '[]'::jsonb) @> $${params.length}::jsonb`; }
+  }
   const order = ct.sort_by === 'sort_order' ? 'e.sort_order ASC, e.id DESC' : ct.sort_by === 'title' ? 'e.title ASC' : 'COALESCE(e.published_at, e.created_at) DESC, e.id DESC';
   const total = (await one(`SELECT count(*)::int AS n FROM entries e WHERE ${where}`, params)).n;
   params.push(limit, (page - 1) * limit);
@@ -53,7 +60,16 @@ r.get('/entries', ah(async (req, res) => {
     `SELECT e.id, e.title, e.slug, e.status, e.sort_order, e.published_at, e.updated_at, e.data, u.name AS author_name, e.author_id
      FROM entries e LEFT JOIN users u ON u.id = e.author_id WHERE ${where} ORDER BY ${order}
      LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
-  res.json({ content_type: ct, items, total, page, pages: Math.ceil(total / limit) });
+  let categories = null;
+  if (catField) {
+    const terms = await many(
+      `SELECT x.id, x.name FROM terms x JOIN taxonomies t ON t.id = x.taxonomy_id
+       WHERE t.site_id = $1 AND t.slug = $2 ORDER BY x.sort_order, x.name`, [req.site.id, catField.taxonomy]);
+    const names = new Map(terms.map((t) => [t.id, t.name]));
+    for (const it of items) it.categories = (it.data?.[catField.key] || []).map((id) => names.get(id)).filter(Boolean);
+    categories = { label: catField.label || 'Category', terms };
+  }
+  res.json({ content_type: ct, items, total, page, pages: Math.ceil(total / limit), categories });
 }));
 
 r.get('/entries/:id', ah(async (req, res) => {
