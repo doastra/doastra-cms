@@ -1,0 +1,4 @@
+node_modules/
+.next/
+components/CookieConsent.tsx
+next-env.d.ts
